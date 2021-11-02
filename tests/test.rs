@@ -10,6 +10,7 @@ use std::mem;
 #[cfg(test)]
 #[test]
 fn test_sendA() {
+
     let program_id = Pubkey::default();
     let key = Pubkey::default();
     let mut lamports = 100000;

@@ -1,5 +1,5 @@
-use borsh::BorshDeserialize;
-use test_case::processor::process_instruction;
+#![allow(non_snake_case)]
+use test_case::processor::{process_instruction, Myinstruction};
 use solana_program_test::*;
 use solana_sdk::{
     account::Account,
@@ -11,86 +11,102 @@ use solana_sdk::{
 use std::mem;
 
 #[tokio::test]
-async fn test_helloworld() {
+async fn test_case() {
     let program_id = Pubkey::new_unique();
-    let greeted_pubkey = Pubkey::new_unique();
+
+    let firstA_pubkey = Pubkey::new_unique();
+    let firstB_pubkey = Pubkey::new_unique();
+    let secondA_pubkey = Pubkey::new_unique();
+    let secondB_pubkey = Pubkey::new_unique();
 
     let mut program_test = ProgramTest::new(
         "test_case", // Run the BPF version with `cargo test-bpf`
         program_id,
         processor!(process_instruction), // Run the native version with `cargo test`
     );
-    program_test.add_account(
-        greeted_pubkey,
-        Account {
-            lamports: 5,
-            data: vec![0_u8; mem::size_of::<u32>()],
-            owner: program_id,
-            ..Account::default()
-        },
-    );
+    let mut add_acc = |a| 
+    {
+        program_test.add_account(
+            a,
+            Account {
+                lamports: 100000,
+                data: vec![0_u8; mem::size_of::<u32>()],
+                owner: program_id,
+                ..Account::default()
+            },
+        );
+    };
+    add_acc(firstA_pubkey);
+    add_acc(firstB_pubkey);
+    add_acc(secondA_pubkey);
+    add_acc(secondB_pubkey);
+
     let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
 
-    // Verify account has zero greetings
-    let greeted_account = banks_client
-        .get_account(greeted_pubkey)
+
+    let FA_account = banks_client
+        .get_account(firstA_pubkey)
         .await
         .expect("get_account")
-        .expect("greeted_account not found");
-    /*assert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
-            .unwrap()
-            .counter,
-        0
-    );*/
+        .expect("FA not found");
+    assert_eq!(
+        FA_account.lamports,
+        100000
+    );
 
-    // Greet once
     let mut transaction = Transaction::new_with_payer(
-        &[Instruction::new_with_bincode(
+        &[Instruction::new_with_borsh(
             program_id,
-            &[0], // ignored but makes the instruction unique in the slot
-            vec![AccountMeta::new(greeted_pubkey, false)],
+            &Myinstruction::SendA(42),
+            vec![
+                AccountMeta::new(firstA_pubkey, false),
+                AccountMeta::new(firstB_pubkey, false),
+                AccountMeta::new(secondA_pubkey, false),
+                AccountMeta::new(secondB_pubkey, false)],
         )],
         Some(&payer.pubkey()),
     );
     transaction.sign(&[&payer], recent_blockhash);
     banks_client.process_transaction(transaction).await.unwrap();
 
-    // Verify account has one greeting
-    let greeted_account = banks_client
-        .get_account(greeted_pubkey)
+    let FA_account = banks_client
+        .get_account(firstA_pubkey)
         .await
         .expect("get_account")
-        .expect("greeted_account not found");
-    /*ssert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
-            .unwrap()
-            .counter,
-        1
-    );*/
-
-    // Greet again
-    let mut transaction = Transaction::new_with_payer(
-        &[Instruction::new_with_bincode(
-            program_id,
-            &[1], // ignored but makes the instruction unique in the slot
-            vec![AccountMeta::new(greeted_pubkey, false)],
-        )],
-        Some(&payer.pubkey()),
+        .expect("FA not found");
+    assert_eq!(
+        FA_account.lamports,
+        99958
     );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
 
-    // Verify account has two greetings
-    let greeted_account = banks_client
-        .get_account(greeted_pubkey)
+    let FB_account = banks_client
+        .get_account(firstB_pubkey)
         .await
         .expect("get_account")
-        .expect("greeted_account not found");
-    /*assert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
-            .unwrap()
-            .counter,
-        2
-    );*/
+        .expect("FA not found");
+    assert_eq!(
+        FB_account.lamports,
+        100042
+    );
+
+    let SA_account = banks_client
+        .get_account(secondA_pubkey)
+        .await
+        .expect("get_account")
+        .expect("FA not found");
+    assert_eq!(
+        SA_account.lamports,
+        100042
+    );
+
+    let SB_account = banks_client
+        .get_account(secondB_pubkey)
+        .await
+        .expect("get_account")
+        .expect("FA not found");
+    assert_eq!(
+        SB_account.lamports,
+        99958
+    );
+
 }
